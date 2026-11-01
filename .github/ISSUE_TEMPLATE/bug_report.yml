@@ -1,0 +1,61 @@
+name: Bug report
+description: Report a reproducible Runspace bug.
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please include enough detail to reproduce the problem without guessing.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the actual behavior and what you expected instead.
+      placeholder: Runspace created a runspace, but ...
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include commands, MCP calls, and the application under test.
+      placeholder: |
+        1. runspace create --name demo
+        2. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Linux X11
+        - Linux Wayland
+        - Windows 10/11
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Runspace version
+      description: Output of `runspace --version`.
+      placeholder: runspace 0.1.0
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and screenshots
+      description: Paste relevant output from `runspace logs`, the MCP response, or a screenshot. Remove secrets first.
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues before opening this report.
+          required: true
+        - label: I removed secrets and private data from the report.
+          required: true

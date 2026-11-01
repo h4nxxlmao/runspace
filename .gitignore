@@ -1,0 +1,12 @@
+/target
+**/*.rs.bk
+*.log
+*.pdb
+*.swp
+.DS_Store
+Thumbs.db
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/

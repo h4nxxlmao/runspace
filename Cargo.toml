@@ -1,0 +1,64 @@
+[package]
+name = "runspace"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Disposable virtual desktops for AI agents"
+authors = ["Runspace contributors"]
+license = "GPL-3.0-or-later"
+readme = "README.md"
+repository = "https://github.com/h4nxxlmao/runspace"
+homepage = "https://getsingularity.lol/runspace"
+documentation = "https://getsingularity.lol/runspace"
+keywords = ["agents", "desktop", "x11", "windows", "mcp"]
+categories = ["command-line-utilities", "development-tools::testing"]
+
+[dependencies]
+anyhow = "1.0"
+base64 = "0.22"
+clap = { version = "4.5", features = ["derive"] }
+fs2 = "0.4"
+png = "0.17"
+rmcp = { version = "3.8", features = ["transport-io"] }
+schemars = "1.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+tokio = { version = "1.47", features = ["macros", "rt-multi-thread", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1.18", features = ["v4"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+x11rb = "0.13"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_Graphics_Dwm",
+  "Win32_Security",
+  "Win32_Storage_FileSystem",
+  "Win32_Storage_Xps",
+  "Win32_System_JobObjects",
+  "Win32_System_LibraryLoader",
+  "Win32_System_Memory",
+  "Win32_System_ProcessStatus",
+  "Win32_System_StationsAndDesktops",
+  "Win32_System_Threading",
+  "Win32_UI_HiDpi",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+[dev-dependencies]
+rmcp = { version = "3.8", features = ["client", "transport-child-process"] }
+tempfile = "3"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

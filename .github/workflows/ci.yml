@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install X11 tools
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xserver-xephyr xdotool openbox x11-xserver-utils
+
+      - name: Format
+        if: runner.os == 'Linux'
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Unit tests
+        run: cargo test --lib
+
+      - name: MCP end-to-end (Linux)
+        if: runner.os == 'Linux'
+        run: RUNSPACE_E2E=1 cargo test --test mcp_e2e -- --nocapture
+
+      - name: MCP end-to-end (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:RUNSPACE_E2E = "1"
+          cargo test --test mcp_e2e -- --nocapture
+
+      - name: Windows GUI end-to-end
+        if: runner.os == 'Windows'
+        run: cargo test --test windows_e2e -- --nocapture
+
+      - name: Release build
+        run: cargo build --release --locked
