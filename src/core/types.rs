@@ -51,6 +51,25 @@ pub struct UiTree {
     pub cursor_y: i32,
 }
 
+/// A matching window or native control with an absolute click point.
+#[derive(Debug, Clone, Serialize)]
+pub struct UiMatch {
+    pub window: WindowInfo,
+    pub control: Option<UiControl>,
+    pub x: i32,
+    pub y: i32,
+}
+
+/// Result of querying the UI tree for text, class, or window filters.
+#[derive(Debug, Clone, Serialize)]
+pub struct UiQueryResult {
+    pub backend: String,
+    pub matches: Vec<UiMatch>,
+    pub windows_scanned: usize,
+    pub controls_scanned: usize,
+    pub truncated: bool,
+}
+
 #[derive(Debug)]
 pub struct RawImage {
     pub width: u32,
@@ -65,13 +84,13 @@ pub struct Screenshot {
     pub png: Vec<u8>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct LaunchOutcome {
     pub pid: u32,
     pub message: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct DoctorCheck {
     pub name: &'static str,
     pub required: bool,
@@ -80,7 +99,7 @@ pub struct DoctorCheck {
     pub detail: String,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize)]
 pub struct DoctorReport {
     pub checks: Vec<DoctorCheck>,
     pub notes: Vec<String>,

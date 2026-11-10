@@ -34,7 +34,7 @@ Agents are good at writing GUI applications and bad at checking whether they act
 - **Fast.** A runspace is a desktop, not an OS. Warm create is ~130 ms on Windows and ~350â€“400 ms on Linux.
 - **No images.** No rootfs, no VM image, no Docker pull, no WSL distro. One small binary uses the desktop APIs already present on the machine.
 - **Disposable.** `destroy` kills every process in the runspace, removes its desktop/sockets/logs/state, and leaves no per-runspace disk footprint.
-- **One interface everywhere.** The CLI, state model and 24 MCP tools are identical on Linux and Windows.
+- **One interface everywhere.** The CLI, state model and 29 MCP tools are identical on Linux and Windows.
 
 ## Platform support
 
@@ -169,13 +169,19 @@ runspace attach <id|name>
 runspace logs <id|name> [-f] [-n LINES]
 runspace trace <id|name> [--html FILE]
 runspace inspect <id|name> [--json]
+runspace launch <id|name> "COMMAND" [--cwd DIR] [--wait-for TEXT] [--wait-class CLASS] [--timeout-ms MS] [--json]
+runspace screenshot <id|name> [--out FILE] [--window WINDOW] [--json]
+runspace windows <id|name> [--json]
+runspace find <id|name> [--text TEXT] [--class CLASS] [--window WINDOW] [--json]
+runspace click-control <id|name> [--text TEXT] [--class CLASS] [--window WINDOW] [--button BUTTON] [--count N] [--json]
+runspace type-control <id|name> --input TEXT [--text TEXT] [--class CLASS] [--window WINDOW] [--clear] [--submit] [--json]
 runspace destroy <id|name>... [--json]    alias: rm
 runspace destroy --all
 runspace mcp [id|name]
-runspace doctor
+runspace doctor [--json]
 ```
 
-Targets can be a full id, a unique id prefix (3+ characters), or a name. `list` reports id, name, mode, display, resolution, uptime, backend pid and live memory. On Windows the display column is `win32`; on Linux it is `:N`.
+Targets can be a full id, a unique id prefix (3+ characters), or a name. `list` reports id, name, mode, display, resolution, uptime, backend pid and live memory. On Windows the display column is `win32`; on Linux it is `:N`. `launch` takes a shell command string, so quote the whole command when it contains spaces.
 
 Create options:
 
@@ -214,11 +220,21 @@ Create options:
 | `launch_app(command, cwd?, wait_ms?, wait_for_window?, wait_for_window_class?, wait_timeout_ms?)` | Launch a command inside the runspace; optionally wait for its window |
 | `wait_for_window(title?, class?, timeout_ms?)` | Wait for a matching visible window and return it as JSON |
 | `list_windows` | JSON array of visible windows |
+| `screenshot_window(id_or_title)` | Capture one visible window as a PNG image |
 | `get_ui_tree` | Text hierarchy of windows and native controls for non-vision agents |
 | `focus_window(id_or_title)` | Activate and raise |
 | `close_window(id_or_title, force?)` | Graceful close, optional kill |
 | `move_window(id_or_title, x, y)` | Move |
 | `resize_window(id_or_title, width, height)` | Resize |
+
+### UI queries
+
+| Tool | Description |
+| --- | --- |
+| `find_ui(text?, class?, window?, limit?)` | Find windows and native controls; returns absolute click coordinates |
+| `wait_for_ui(text?, class?, window?, limit?, timeout_ms?)` | Wait for a matching window or control and return it as JSON |
+| `click_ui(text?, class?, window?, limit?, button?, count?)` | Click the center of the first enabled match |
+| `type_ui(input, text?, class?, window?, limit?, clear?, submit?)` | Click a match and type into it |
 
 ### Runspace
 
@@ -235,15 +251,10 @@ Create options:
 Agents that cannot read screenshots do not need them:
 
 - `get_ui_tree` returns a JSON hierarchy of visible windows and native controls: class, text, bounds, enabled and focused. On Windows this includes Button/Edit/Static text; Linux exposes top-level windows.
+- `find_ui` and `wait_for_ui` locate controls by text or class. `click_ui` clicks the center of the first enabled match, and `type_ui` can click and type in one call.
 - `wait_for_window` removes startup races. `launch_app` can wait directly with `wait_for_window` or `wait_for_window_class`.
 - `get_logs` returns application output. Tool failures automatically include the recent log, the UI tree and a screenshot.
-- Click control centers from `get_ui_tree`, type, then call `get_ui_tree` again to verify labels or Edit text.
-
-```json
-{ "name": "get_ui_tree" }
-```
-
-The CLI equivalent is `runspace inspect <id|name>`; add `--json` for machine-readable output.
+- The CLI equivalents are `runspace find`, `runspace click-control`, `runspace type-control`, and `runspace inspect`; add `--json` for machine-readable output.
 
 ## Session traces
 
@@ -347,8 +358,8 @@ src/
     windows/         Win32 desktops, keeper, job objects, PrintWindow, viewer, Windows lifecycle
   cli.rs             clap surface
   commands.rs        CLI presentation
-  ops.rs             platform-neutral create/list/info/destroy/logs/attach
-  mcp.rs             the 24-tool stdio server
+  ops.rs             platform-neutral lifecycle, UI queries, launch and screenshots
+  mcp.rs             the 29-tool stdio server
 trace.rs           opt-in recording and self-contained HTML export
   watch.rs           idle/liveness watchdog
   main.rs

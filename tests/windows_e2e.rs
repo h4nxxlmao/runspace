@@ -169,6 +169,23 @@ async fn windows_gui_round_trip() -> anyhow::Result<()> {
         "test app window not found: {windows:?}"
     );
 
+    let window_shot = call!(
+        "screenshot_window",
+        rmcp::object!({ "id_or_title": "Runspace Test App" })
+    );
+    assert!(
+        window_shot
+            .content
+            .iter()
+            .any(|block| block.as_image().is_some()),
+        "screenshot_window did not return an image"
+    );
+    assert!(
+        text_of(&window_shot).contains("Runspace Test App"),
+        "screenshot_window did not identify the window: {}",
+        text_of(&window_shot)
+    );
+
     let tree = call!("get_ui_tree", rmcp::object!({}));
     assert!(
         text_of(&tree).contains("Increment"),
@@ -180,11 +197,44 @@ async fn windows_gui_round_trip() -> anyhow::Result<()> {
     let (edit_x, edit_y) = center(&log, "edit_center")?;
     let (button_x, button_y) = center(&log, "button_center")?;
 
+    let found = call!("find_ui", rmcp::object!({ "text": "Increment" }));
+    let found: serde_json::Value = serde_json::from_str(&text_of(&found))?;
+    assert_eq!(
+        found["matches"][0]["control"]["text"], "Increment",
+        "find_ui did not return the button: {found}"
+    );
+    assert_eq!(
+        found["matches"][0]["x"].as_i64(),
+        Some(i64::from(button_x)),
+        "find_ui returned an unexpected X coordinate: {found}"
+    );
+    assert_eq!(
+        found["matches"][0]["y"].as_i64(),
+        Some(i64::from(button_y)),
+        "find_ui returned an unexpected Y coordinate: {found}"
+    );
+    let waited_ui = call!(
+        "wait_for_ui",
+        rmcp::object!({ "text": "Increment", "timeout_ms": 1000 })
+    );
+    assert!(
+        text_of(&waited_ui).contains("Increment"),
+        "wait_for_ui did not return the button: {}",
+        text_of(&waited_ui)
+    );
+
     call!("click", rmcp::object!({ "x": edit_x, "y": edit_y }));
     call!("type", rmcp::object!({ "text": "hello windows" }));
     call!("key", rmcp::object!({ "keys": ["ctrl+a"] }));
-    call!("type", rmcp::object!({ "text": "replaced" }));
-    call!("click", rmcp::object!({ "x": button_x, "y": button_y }));
+    call!(
+        "type_ui",
+        rmcp::object!({
+            "class": "Edit",
+            "input": "replaced",
+            "clear": true
+        })
+    );
+    call!("click_ui", rmcp::object!({ "text": "Increment" }));
     tokio::time::sleep(Duration::from_millis(400)).await;
 
     let log = std::fs::read_to_string(&log_path).unwrap_or_default();

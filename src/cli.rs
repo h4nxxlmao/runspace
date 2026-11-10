@@ -51,11 +51,29 @@ pub enum Commands {
     /// Print a text hierarchy of windows and native controls
     Inspect(InspectArgs),
 
+    /// Launch a command inside a runspace
+    Launch(LaunchArgs),
+
+    /// Capture the desktop to a PNG file
+    Screenshot(ScreenshotArgs),
+
+    /// List visible windows in a runspace
+    Windows(WindowsArgs),
+
+    /// Find windows or native controls by text, class, or window
+    Find(FindArgs),
+
+    /// Click the center of the first matching UI control or window
+    ClickControl(ClickControlArgs),
+
+    /// Click a matching control and type into it
+    TypeControl(TypeControlArgs),
+
     /// Serve the MCP server for a runspace over stdio
     Mcp(McpArgs),
 
     /// Check system dependencies
-    Doctor,
+    Doctor(DoctorArgs),
 
     #[command(name = "__watch", hide = true)]
     Watch(WatchArgs),
@@ -171,6 +189,179 @@ pub struct InspectArgs {
     #[arg(value_name = "ID|NAME")]
     pub target: String,
 
+    /// Print machine-readable JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct LaunchArgs {
+    /// Runspace id, unique prefix, or name
+    #[arg(value_name = "ID|NAME")]
+    pub target: String,
+
+    /// Shell command string, for example "notepad.exe" or "python app.py"
+    #[arg(value_name = "COMMAND", allow_hyphen_values = true)]
+    pub command: String,
+
+    /// Working directory for the launched command
+    #[arg(long, value_name = "DIR")]
+    pub cwd: Option<PathBuf>,
+
+    /// Wait for a window whose title contains this text
+    #[arg(long, value_name = "TEXT")]
+    pub wait_for: Option<String>,
+
+    /// Wait for a window whose class contains this text
+    #[arg(long, value_name = "CLASS")]
+    pub wait_class: Option<String>,
+
+    /// Maximum time to wait for the window in milliseconds
+    #[arg(long, default_value_t = 10_000, value_name = "MS")]
+    pub timeout_ms: u64,
+
+    /// How long to wait for an immediate exit before returning
+    #[arg(long, default_value_t = 300, value_name = "MS")]
+    pub wait_ms: u64,
+
+    /// Print machine-readable JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct ScreenshotArgs {
+    /// Runspace id, unique prefix, or name
+    #[arg(value_name = "ID|NAME")]
+    pub target: String,
+
+    /// Output PNG path (default: ./runspace-<id>.png)
+    #[arg(short = 'o', long, value_name = "FILE")]
+    pub out: Option<PathBuf>,
+
+    /// Crop the screenshot to a window id, title, or class
+    #[arg(long, value_name = "WINDOW")]
+    pub window: Option<String>,
+
+    /// Print machine-readable JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct WindowsArgs {
+    /// Runspace id, unique prefix, or name
+    #[arg(value_name = "ID|NAME")]
+    pub target: String,
+
+    /// Print machine-readable JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct FindArgs {
+    /// Runspace id, unique prefix, or name
+    #[arg(value_name = "ID|NAME")]
+    pub target: String,
+
+    /// Case-insensitive substring of control text or window title
+    #[arg(long, value_name = "TEXT")]
+    pub text: Option<String>,
+
+    /// Case-insensitive substring of control or window class
+    #[arg(long, value_name = "CLASS")]
+    pub class: Option<String>,
+
+    /// Restrict results to a window id, title, or class
+    #[arg(long, value_name = "WINDOW")]
+    pub window: Option<String>,
+
+    /// Maximum number of matches (1-100)
+    #[arg(long, default_value_t = 20, value_name = "N")]
+    pub limit: usize,
+
+    /// Print machine-readable JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct ClickControlArgs {
+    /// Runspace id, unique prefix, or name
+    #[arg(value_name = "ID|NAME")]
+    pub target: String,
+
+    /// Case-insensitive substring of control text or window title
+    #[arg(long, value_name = "TEXT")]
+    pub text: Option<String>,
+
+    /// Case-insensitive substring of control or window class
+    #[arg(long, value_name = "CLASS")]
+    pub class: Option<String>,
+
+    /// Restrict the match to a window id, title, or class
+    #[arg(long, value_name = "WINDOW")]
+    pub window: Option<String>,
+
+    /// Maximum number of matches to inspect (1-100)
+    #[arg(long, default_value_t = 20, value_name = "N")]
+    pub limit: usize,
+
+    /// Mouse button: left, middle, or right
+    #[arg(long, default_value = "left")]
+    pub button: String,
+
+    /// Number of clicks
+    #[arg(long, default_value_t = 1)]
+    pub count: u32,
+
+    /// Print machine-readable JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct TypeControlArgs {
+    /// Runspace id, unique prefix, or name
+    #[arg(value_name = "ID|NAME")]
+    pub target: String,
+
+    /// Text to type
+    #[arg(long, value_name = "TEXT")]
+    pub input: String,
+
+    /// Case-insensitive substring of control text or window title
+    #[arg(long, value_name = "TEXT")]
+    pub text: Option<String>,
+
+    /// Case-insensitive substring of control or window class
+    #[arg(long, value_name = "CLASS")]
+    pub class: Option<String>,
+
+    /// Restrict the match to a window id, title, or class
+    #[arg(long, value_name = "WINDOW")]
+    pub window: Option<String>,
+
+    /// Maximum number of matches to inspect (1-100)
+    #[arg(long, default_value_t = 20, value_name = "N")]
+    pub limit: usize,
+
+    /// Select all existing text before typing
+    #[arg(long)]
+    pub clear: bool,
+
+    /// Press Enter after typing
+    #[arg(long)]
+    pub submit: bool,
+
+    /// Print machine-readable JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct DoctorArgs {
     /// Print machine-readable JSON
     #[arg(long)]
     pub json: bool,

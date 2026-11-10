@@ -436,6 +436,196 @@ impl RunspaceServer {
         .await
     }
 
+    #[tool(
+        description = "Capture one visible window as a PNG image. The window can be selected by id, exact title, title substring, or class. The image is cropped from the desktop canvas, so overlapping windows may appear."
+    )]
+    async fn screenshot_window(
+        &self,
+        Parameters(params): Parameters<WindowParams>,
+    ) -> Result<CallToolResult, McpError> {
+        self.trace_tool("screenshot_window", &params);
+        let paths = self.paths.clone();
+        let id = self.id.clone();
+        let target = params.id_or_title;
+        let result = tokio::task::spawn_blocking(
+            move || -> crate::Result<(platform::WindowInfo, Screenshot)> {
+                let _record = state::load(&paths, &id)?;
+                touch(&paths, &id);
+                ops::capture_window(&id, &target)
+            },
+        )
+        .await;
+
+        match result {
+            Ok(Ok((window, shot))) => {
+                let data = base64::engine::general_purpose::STANDARD.encode(&shot.png);
+                Ok(CallToolResult::success(vec![
+                    ContentBlock::image(data, "image/png"),
+                    ContentBlock::text(format!(
+                        "window {} \"{}\" {}x{} ({} bytes PNG)",
+                        window.id,
+                        window.title,
+                        shot.width,
+                        shot.height,
+                        shot.png.len()
+                    )),
+                ]))
+            }
+            Ok(Err(error)) => Ok(tool_error(error)),
+            Err(error) => Ok(tool_error(format!("internal error: {error}"))),
+        }
+    }
+
+    #[tool(
+        description = "Find visible windows and native controls by case-insensitive text, class, or window filters. Returns JSON matches with absolute click coordinates. Control matches are preferred; when a platform exposes no controls, the window itself is matched. Use this for non-vision automation before clicking."
+    )]
+    async fn find_ui(
+        &self,
+        Parameters(params): Parameters<UiQueryParams>,
+    ) -> Result<CallToolResult, McpError> {
+        self.trace_tool("find_ui", &params);
+        let paths = self.paths.clone();
+        let id = self.id.clone();
+        let text = params.text;
+        let class = params.class;
+        let window = params.window;
+        let limit = params.limit.unwrap_or(20);
+        blocking(move || {
+            let _record = state::load(&paths, &id)?;
+            touch(&paths, &id);
+            let query = ops::UiQuery {
+                text: text.as_deref(),
+                class: class.as_deref(),
+                window: window.as_deref(),
+                limit,
+            };
+            let result = ops::query_ui(&id, &query)?;
+            serde_json::to_string(&result).map_err(Into::into)
+        })
+        .await
+    }
+
+    #[tool(
+        description = "Wait until a visible window or native control matches case-insensitive text, class, or window filters. Returns the same JSON as find_ui once a match exists, or an error after timeout_ms (default 10000). Use this for non-vision automation instead of fixed sleeps."
+    )]
+    async fn wait_for_ui(
+        &self,
+        Parameters(params): Parameters<WaitForUiParams>,
+    ) -> Result<CallToolResult, McpError> {
+        self.trace_tool("wait_for_ui", &params);
+        if params.text.is_none() && params.class.is_none() && params.window.is_none() {
+            return Ok(tool_error("provide at least one of text, class, or window"));
+        }
+        let paths = self.paths.clone();
+        let id = self.id.clone();
+        let text = params.text;
+        let class = params.class;
+        let window = params.window;
+        let limit = params.limit.unwrap_or(20);
+        let timeout = params.timeout_ms.unwrap_or(10_000).clamp(100, 120_000);
+        let result = tokio::task::spawn_blocking(move || -> crate::Result<String> {
+            let _record = state::load(&paths, &id)?;
+            let query = ops::UiQuery {
+                text: text.as_deref(),
+                class: class.as_deref(),
+                window: window.as_deref(),
+                limit,
+            };
+            let deadline = Instant::now() + Duration::from_millis(timeout);
+            loop {
+                touch(&paths, &id);
+                let result = ops::query_ui(&id, &query)?;
+                if !result.matches.is_empty() {
+                    return serde_json::to_string(&result).map_err(Into::into);
+                }
+                if Instant::now() >= deadline {
+                    return Err(crate::Error::invalid(format!(
+                        "no UI match within {timeout}ms; use find_ui or get_ui_tree to inspect the current tree"
+                    )));
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        })
+        .await;
+
+        match result {
+            Ok(Ok(json)) => Ok(tool_success(json)),
+            Ok(Err(error)) => Ok(tool_error(error)),
+            Err(error) => Ok(tool_error(format!("internal error: {error}"))),
+        }
+    }
+
+    #[tool(
+        description = "Click the center of the first enabled window or native control matching case-insensitive text, class, or window filters. Returns the matched element and click result as JSON. Use find_ui first when the target is ambiguous."
+    )]
+    async fn click_ui(
+        &self,
+        Parameters(params): Parameters<ClickUiParams>,
+    ) -> Result<CallToolResult, McpError> {
+        self.trace_tool("click_ui", &params);
+        let paths = self.paths.clone();
+        let id = self.id.clone();
+        let text = params.text;
+        let class = params.class;
+        let window = params.window;
+        let limit = params.limit.unwrap_or(20);
+        let button = params.button.unwrap_or_else(|| "left".into());
+        let count = params.count.unwrap_or(1);
+        blocking(move || {
+            let _record = state::load(&paths, &id)?;
+            touch(&paths, &id);
+            let query = ops::UiQuery {
+                text: text.as_deref(),
+                class: class.as_deref(),
+                window: window.as_deref(),
+                limit,
+            };
+            let (matched, message) = ops::click_ui(&id, &query, &button, count)?;
+            serde_json::to_string(&serde_json::json!({
+                "match": matched,
+                "message": message,
+            }))
+            .map_err(Into::into)
+        })
+        .await
+    }
+
+    #[tool(
+        description = "Click the first enabled window or control matching text, class, or window filters, then type input into it. Optionally select all existing text first and press Enter after typing. Returns the matched element and action log as JSON."
+    )]
+    async fn type_ui(
+        &self,
+        Parameters(params): Parameters<TypeUiParams>,
+    ) -> Result<CallToolResult, McpError> {
+        self.trace_tool("type_ui", &params);
+        let paths = self.paths.clone();
+        let id = self.id.clone();
+        let text = params.text;
+        let class = params.class;
+        let window = params.window;
+        let limit = params.limit.unwrap_or(20);
+        let input = params.input;
+        let clear = params.clear.unwrap_or(false);
+        let submit = params.submit.unwrap_or(false);
+        blocking(move || {
+            let _record = state::load(&paths, &id)?;
+            touch(&paths, &id);
+            let query = ops::UiQuery {
+                text: text.as_deref(),
+                class: class.as_deref(),
+                window: window.as_deref(),
+                limit,
+            };
+            let (matched, message) = ops::type_ui(&id, &query, &input, clear, submit)?;
+            serde_json::to_string(&serde_json::json!({
+                "match": matched,
+                "message": message,
+            }))
+            .map_err(Into::into)
+        })
+        .await
+    }
+
     #[tool(description = "Focus (activate and raise) a window by id or by (part of) its title.")]
     async fn focus_window(
         &self,
@@ -603,8 +793,8 @@ impl RunspaceServer {
 
 #[tool_handler(
     name = "runspace",
-    version = "0.1.0",
-    instructions = "You control a disposable desktop. Screenshots are PNG images. If you cannot see images, call get_ui_tree for a text hierarchy of windows and native controls, and get_logs for application output. Coordinates are absolute pixels with (0,0) at the top-left. wait_for_window removes startup races; launch_app can wait for a window directly. The desktop is isolated from the host and is destroyed with the destroy tool."
+    version = "0.2.0",
+    instructions = "You control a disposable desktop. Screenshots are PNG images; screenshot_window captures one window. If you cannot see images, call get_ui_tree for a text hierarchy, find_ui and wait_for_ui to locate controls by text or class, click_ui to activate a control, and type_ui to click and type in one step. get_logs returns application output. Coordinates are absolute pixels with (0,0) at the top-left. wait_for_window removes startup races; launch_app can wait for a window directly. The desktop is isolated from the host and is destroyed with the destroy tool."
 )]
 impl ServerHandler for RunspaceServer {}
 
@@ -724,6 +914,66 @@ pub struct LaunchParams {
 }
 
 #[derive(Debug, Deserialize, Serialize, schemars::JsonSchema)]
+pub struct UiQueryParams {
+    /// Case-insensitive substring of control text or window title
+    pub text: Option<String>,
+    /// Case-insensitive substring of control or window class
+    pub class: Option<String>,
+    /// Restrict matches to a window id, title, or class
+    pub window: Option<String>,
+    /// Maximum number of matches (1-100, default 20)
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, Serialize, schemars::JsonSchema)]
+pub struct WaitForUiParams {
+    /// Case-insensitive substring of control text or window title
+    pub text: Option<String>,
+    /// Case-insensitive substring of control or window class
+    pub class: Option<String>,
+    /// Restrict matches to a window id, title, or class
+    pub window: Option<String>,
+    /// Maximum number of matches (1-100, default 20)
+    pub limit: Option<usize>,
+    /// Maximum time to wait in milliseconds (default 10000)
+    pub timeout_ms: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, Serialize, schemars::JsonSchema)]
+pub struct ClickUiParams {
+    /// Case-insensitive substring of control text or window title
+    pub text: Option<String>,
+    /// Case-insensitive substring of control or window class
+    pub class: Option<String>,
+    /// Restrict matches to a window id, title, or class
+    pub window: Option<String>,
+    /// Maximum number of matches to inspect (1-100, default 20)
+    pub limit: Option<usize>,
+    /// Mouse button: left, middle or right (default: left)
+    pub button: Option<String>,
+    /// Number of clicks (default: 1)
+    pub count: Option<u32>,
+}
+
+#[derive(Debug, Deserialize, Serialize, schemars::JsonSchema)]
+pub struct TypeUiParams {
+    /// Case-insensitive substring of control text or window title
+    pub text: Option<String>,
+    /// Case-insensitive substring of control or window class
+    pub class: Option<String>,
+    /// Restrict matches to a window id, title, or class
+    pub window: Option<String>,
+    /// Maximum number of matches to inspect (1-100, default 20)
+    pub limit: Option<usize>,
+    /// Text to type after clicking the match
+    pub input: String,
+    /// Select all existing text before typing (default: false)
+    pub clear: Option<bool>,
+    /// Press Enter after typing (default: false)
+    pub submit: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Serialize, schemars::JsonSchema)]
 pub struct WindowParams {
     /// Window id or part of its title
     pub id_or_title: String,
@@ -782,39 +1032,7 @@ fn wait_for_window_blocking(
     class: Option<&str>,
     timeout_ms: u64,
 ) -> crate::Result<platform::WindowInfo> {
-    let timeout = timeout_ms.clamp(100, 120_000);
-    let desktop = Desktop::new(record, paths)?;
-    let deadline = Instant::now() + Duration::from_millis(timeout);
-    let title = title.map(str::to_ascii_lowercase);
-    let class = class.map(str::to_ascii_lowercase);
-    loop {
-        let windows = desktop.list_windows()?;
-        if let Some(window) = windows.iter().find(|window| {
-            title
-                .as_deref()
-                .is_none_or(|title| window.title.to_ascii_lowercase().contains(title))
-                && class
-                    .as_deref()
-                    .is_none_or(|class| window.class.to_ascii_lowercase().contains(class))
-        }) {
-            return Ok(window.clone());
-        }
-        if Instant::now() >= deadline {
-            let open = if windows.is_empty() {
-                "none".to_string()
-            } else {
-                windows
-                    .iter()
-                    .map(|window| format!("\"{}\" <{}>", window.title, window.class))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            };
-            return Err(crate::Error::invalid(format!(
-                "no window matched within {timeout}ms; open windows: {open}"
-            )));
-        }
-        std::thread::sleep(Duration::from_millis(100));
-    }
+    ops::wait_for_window_on(record, paths, title, class, timeout_ms)
 }
 
 fn tool_success(message: impl Into<String>) -> CallToolResult {

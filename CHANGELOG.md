@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-01
+
+### Added
+
+- CLI `launch`, `screenshot`, `windows`, `find`, `click-control`, and `type-control` commands.
+- Window-cropped screenshots through `runspace screenshot --window` and MCP `screenshot_window`.
+- `runspace doctor --json` for machine-readable dependency reports.
+- MCP `find_ui`, `wait_for_ui`, `click_ui`, and `type_ui` tools for text-only agents.
+- Shared UI matcher with absolute click coordinates and enabled-control filtering.
+- One-call click-and-type workflows with optional select-all and submit.
+
 ## [0.1.0] - 2026-11-01
 
 ### Added
@@ -23,5 +34,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Linux and Windows end-to-end tests.
 - GPL-3.0-or-later open-source licensing.
 
-[Unreleased]: https://github.com/h4nxxlmao/runspace/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/h4nxxlmao/runspace/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/h4nxxlmao/runspace/releases/tag/v0.2.0
 [0.1.0]: https://github.com/h4nxxlmao/runspace/releases/tag/v0.1.0
